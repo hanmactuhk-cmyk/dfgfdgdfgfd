@@ -1,0 +1,79 @@
+name: Build Hoai VideoAi Automation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Check Node.js and npm
+        shell: pwsh
+        run: |
+          node --version
+          npm --version
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Validate JavaScript
+        shell: pwsh
+        run: |
+          node --check main.js
+          node --check preload.js
+
+          if (Test-Path "automation") {
+            Get-ChildItem automation -Filter *.js -Recurse | ForEach-Object {
+              node --check $_.FullName
+            }
+          }
+
+          if (Test-Path "renderer") {
+            Get-ChildItem renderer -Filter *.js -Recurse | ForEach-Object {
+              node --check $_.FullName
+            }
+          }
+
+      - name: Build Windows EXE
+        run: npm run build -- --publish never
+
+      - name: Verify build output
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "release")) {
+            Write-Error "Không tìm thấy thư mục release."
+            exit 1
+          }
+
+          $files = Get-ChildItem "release" -Filter *.exe
+
+          if ($files.Count -eq 0) {
+            Write-Error "Không tìm thấy file EXE sau khi build."
+            exit 1
+          }
+
+          Write-Host "Các file EXE đã tạo:"
+          $files | Select-Object Name, Length, FullName
+
+      - name: Upload Windows EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: Hoai-VideoAi-Automation-Windows
+          path: release/*.exe
+          if-no-files-found: error
